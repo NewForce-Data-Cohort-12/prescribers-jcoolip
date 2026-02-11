@@ -15,8 +15,20 @@ JOIN prescription
 on prescription.npi = prescriber.npi
 GROUP BY provider_first, provider_last, specialty
 ORDER BY claim_count DESC;
+----------------SARAH------------------------
+SELECT nppes_provider_first_name 
+	, nppes_provider_last_org_name
+	, specialty_description
+	, SUM(total_claim_count) AS total_claims
+	FROM prescription
+	INNER JOIN prescriber
+	USING(npi)
+	GROUP BY nppes_provider_first_name 
+	, nppes_provider_last_org_name
+	, specialty_description
+	ORDER BY total_claims DESC;
 
-
+	
 -- 2a. Which specialty had the most total number of claims (totaled over all drugs)?
 
 SELECT prescriber.specialty_description AS specialty, SUM(total_claim_count) AS claim_count
@@ -47,15 +59,32 @@ on doc.npi = rx.npi
 where rx.npi is null
 order by doc.specialty_description ASC;
 
-select distinct specialty_description
-from prescriber
-order by specialty_description ASC;
+------------------Avery------smart one---------
+SELECT specialty_description, COUNT(prescription.*) AS total_prescriptions
+FROM prescriber
+FULL JOIN prescription
+USING (npi)
+GROUP BY specialty_description
+HAVING COUNT(prescription.*) = 0;
+
+
+-- select distinct specialty_description
+-- from prescriber
+-- order by specialty_description ASC;
 
 
 -- d. Difficult Bonus: Do not attempt until you have solved all other problems! For each specialty,
 -- 	report the percentage of total claims by that specialty which are for opioids. Which specialties 
 -- 	have a high percentage of opioids?
-
+select specialty_description, round(sum(case when opioid_drug_flag = 'Y' then prescription.total_claim_count end)/SUM(total_claim_count),3)*100 as opioid_pct
+from prescription
+inner join prescriber
+using(npi)
+inner join drug
+on prescription.drug_name = drug.drug_name
+group by specialty_description
+order by opioid_pct desc nulls last;
+	
 
 
 
@@ -67,8 +96,23 @@ using(drug_name)
 order by cost DESC
 limit 1;
 
+select generic_name, sum(rx.total_drug_count) as drug_money
+from drug as d
+inner join prescription as rx
+using(drug_name)
+group by generic_name
+order by drug_money desc
+
 -- 3b. Which drug (generic_name) has the hightest total cost per day? Bonus: 
 -- Round your cost per day column to 2 decimal places. Google ROUND to see how this works.
+
+select generic_name, round(sum(total_drug_cost) / sum(total_day_supply),2)::money as drug_cost_day
+from drug as d
+inner join prescription as rx
+using(drug_name)
+group by generic_name
+order by drug_cost_day desc;
+
 
 select drug.generic_name, round((rx.total_drug_cost/rx.total_day_supply),2) as per_day
 from prescription as rx
@@ -104,7 +148,7 @@ GROUP BY drug_type;
 
 
 -- 5a. How many CBSAs are in Tennessee? Warning: The cbsa table contains information for all states, not just Tennessee.
-select *
+select count(distinct(cbsa))
 from cbsa
 join fips_county
 using(fipscounty)
@@ -204,24 +248,27 @@ select * from drug as d;
 
 select doc.npi, d.drug_name 
 from prescriber as doc
-join prescription as rx
-using(npi)
-join drug as d
-using(drug_name)
+cross join drug as d
 where doc.specialty_description = 'Pain Management' and doc.nppes_provider_city = 'NASHVILLE' and d.opioid_drug_flag = 'Y';
 
 -- b. Next, report the number of claims per drug per prescriber. Be sure to include all combinations, whether or not the prescriber had any claims. You should report the npi, the drug name, and the number of claims (total_claim_count).
 
 select doc.npi, d.drug_name, rx.total_claim_count
 from prescriber as doc
-join prescription as rx
-using(npi)
-join drug as d
-using(drug_name);
-
+cross join drug as d
+left join prescription as rx
+using(npi, drug_name)
+where doc.specialty_description = 'Pain Management' and doc.nppes_provider_city = 'NASHVILLE' and d.opioid_drug_flag = 'Y';
 
 -- c. Finally, if you have not done so already, fill in any missing values for total_claim_count with 0. Hint - Google the COALESCE function.
 
+select doc.npi, d.drug_name, coalesce(rx.total_claim_count,0) as total_claims
+from prescriber as doc
+cross join drug as d
+left join prescription as rx
+using(npi, drug_name)
+where doc.specialty_description = 'Pain Management' and doc.nppes_provider_city = 'NASHVILLE' and d.opioid_drug_flag = 'Y'
+order by total_claims desc;
 
 
 
